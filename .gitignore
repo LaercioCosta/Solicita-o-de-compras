@@ -1,0 +1,33 @@
+# Dependências
+node_modules/
+
+# Builds
+dist/
+build/
+
+# Prisma client gerado
+backend/src/generated/
+
+# Ambiente e secrets
+.env
+.env.*
+!.env.example
+
+# Testes e cobertura
+coverage/
+
+# Uploads (documentos em volume local — DEC-009)
+backend/uploads/
+
+# Logs
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Build incremental cache
+tsconfig.build.tsbuildinfo
+
+# Config da ferramenta opencode (local)
+opencode.json

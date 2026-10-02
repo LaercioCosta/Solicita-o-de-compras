@@ -1,0 +1,362 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum EstadoSolicitacao {
+  RASCUNHO
+  AGUARDANDO_APROVACAO_SETOR
+  AGUARDANDO_APROVACAO_FINANCEIRA
+  APROVADO
+  AGUARDANDO_TI
+  COMPRA_EM_ANDAMENTO
+  AGUARDANDO_FINANCEIRO
+  PAGO
+  AGUARDANDO_NF
+  CONCLUIDO
+  REPROVADO
+  CANCELADO
+  AGUARDANDO_CORRECAO
+
+  @@map("estado_solicitacao")
+}
+
+enum PerfilUsuario {
+  SOLICITANTE
+  GERENTE
+  GERENTE_FINANCEIRA
+  FINANCEIRO
+  TI
+  ADMINISTRADOR
+
+  @@map("perfil_usuario")
+}
+
+enum SetorSlug {
+  OFICINA
+  TI
+  MKT
+  COMERCIAL
+
+  @@map("setor_slug")
+}
+
+enum NivelAprovacao {
+  SETOR
+  FINANCEIRA
+
+  @@map("nivel_aprovacao")
+}
+
+enum DecisaoAprovacao {
+  APROVADO
+  REPROVADO
+
+  @@map("decisao_aprovacao")
+}
+
+enum FormaPagamento {
+  BOLETO
+  PIX
+
+  @@map("forma_pagamento")
+}
+
+enum TipoDocumento {
+  ORCAMENTO
+  COMPROVANTE_PAGAMENTO
+  NOTA_FISCAL
+
+  @@map("tipo_documento")
+}
+
+enum AcaoAuditoria {
+  CRIAR
+  SUBMETER
+  APROVAR
+  REPROVAR
+  CORRIGIR
+  COMPRAR
+  PAGAR
+  CONCLUIR
+  CANCELAR
+
+  @@map("acao_auditoria")
+}
+
+model Setor {
+  id        Int       @id @default(autoincrement())
+  slug      SetorSlug @unique
+  nome      String
+  descricao String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  usuarios     Usuario[]
+  solicitacoes Solicitacao[]
+
+  @@map("setores")
+}
+
+model Perfil {
+  id        Int           @id @default(autoincrement())
+  slug      PerfilUsuario @unique
+  nome      String
+  descricao String?
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  usuarios   Usuario[]
+  permissoes Permissao[]
+
+  @@map("perfis")
+}
+
+model Permissao {
+  id        Int      @id @default(autoincrement())
+  perfilId  Int      @map("perfil_id")
+  entidade  String
+  acao      String
+  permitida Boolean
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  perfil Perfil @relation(fields: [perfilId], references: [id], onDelete: Restrict)
+
+  @@unique([perfilId, entidade, acao])
+  @@map("permissoes")
+}
+
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  nome      String
+  email     String   @unique
+  senhaHash String   @map("senha_hash")
+  perfilId  Int      @map("perfil_id")
+  setorId   Int      @map("setor_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  perfil                Perfil        @relation(fields: [perfilId], references: [id], onDelete: Restrict)
+  setor                 Setor         @relation(fields: [setorId], references: [id], onDelete: Restrict)
+  solicitacoes          Solicitacao[]
+  aprovacoes            Aprovacao[]
+  compras               Compra[]
+  pagamentosRegistrados Pagamento[]   @relation("PagamentoRegistradoPor")
+  pagamentosEfetuados   Pagamento[]   @relation("PagamentoPagoPor")
+  documentos            Documento[]
+  registrosAuditoria    Auditoria[]
+  notificacoes          Notificacao[]
+  sessoes               Sessao[]
+
+  @@index([perfilId])
+  @@index([setorId])
+  @@map("usuarios")
+}
+
+model Solicitacao {
+  id                 Int               @id @default(autoincrement())
+  descricao          String
+  status             EstadoSolicitacao @default(RASCUNHO)
+  cicloAprovacao     Int               @default(1) @map("ciclo_aprovacao")
+  solicitanteId      Int               @map("solicitante_id")
+  setorId            Int               @map("setor_id")
+  motivoCancelamento String?           @map("motivo_cancelamento")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  solicitante  Usuario           @relation(fields: [solicitanteId], references: [id], onDelete: Restrict)
+  setor        Setor             @relation(fields: [setorId], references: [id], onDelete: Restrict)
+  orcamentos   Orcamento[]
+  aprovacoes   Aprovacao[]
+  compra       Compra?
+  itens        SolicitacaoItem[]
+  notificacoes Notificacao[]
+
+  @@index([status])
+  @@index([solicitanteId])
+  @@index([setorId, status])
+  @@map("solicitacoes")
+}
+
+model SolicitacaoItem {
+  id                    Int      @id @default(autoincrement())
+  solicitacaoId         Int      @map("solicitacao_id")
+  produto               String
+  quantidade            Decimal  @db.Decimal(10, 2)
+  valorUnitarioEstimado Decimal  @map("valor_unitario_estimado") @db.Decimal(10, 2)
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  solicitacao Solicitacao @relation(fields: [solicitacaoId], references: [id], onDelete: Restrict)
+
+  @@index([solicitacaoId])
+  @@map("solicitacao_itens")
+}
+
+model Orcamento {
+  id            Int       @id @default(autoincrement())
+  solicitacaoId Int       @map("solicitacao_id")
+  linkLoja      String    @map("link_loja")
+  cnpjLoja      String    @map("cnpj_loja")
+  valor         Decimal   @db.Decimal(10, 2)
+  validadeAte   DateTime? @map("validade_ate")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  solicitacao Solicitacao @relation(fields: [solicitacaoId], references: [id], onDelete: Restrict)
+  aprovacoes  Aprovacao[]
+  compras     Compra[]
+  documentos  Documento[]
+
+  @@index([solicitacaoId])
+  @@map("orcamentos")
+}
+
+model Aprovacao {
+  id             Int              @id @default(autoincrement())
+  solicitacaoId  Int              @map("solicitacao_id")
+  orcamentoId    Int              @map("orcamento_id")
+  aprovadorId    Int              @map("aprovador_id")
+  nivel          NivelAprovacao
+  decisao        DecisaoAprovacao
+  cicloAprovacao Int              @map("ciclo_aprovacao")
+  observacao     String?
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  solicitacao Solicitacao @relation(fields: [solicitacaoId], references: [id], onDelete: Restrict)
+  orcamento   Orcamento   @relation(fields: [orcamentoId], references: [id], onDelete: Restrict)
+  aprovador   Usuario     @relation(fields: [aprovadorId], references: [id], onDelete: Restrict)
+
+  @@unique([solicitacaoId, cicloAprovacao, nivel])
+  @@index([orcamentoId])
+  @@index([aprovadorId])
+  @@map("aprovacoes")
+}
+
+model Compra {
+  id            Int      @id @default(autoincrement())
+  solicitacaoId Int      @unique @map("solicitacao_id")
+  orcamentoId   Int      @map("orcamento_id")
+  executanteId  Int      @map("executante_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  solicitacao Solicitacao @relation(fields: [solicitacaoId], references: [id], onDelete: Restrict)
+  orcamento   Orcamento   @relation(fields: [orcamentoId], references: [id], onDelete: Restrict)
+  executante  Usuario     @relation(fields: [executanteId], references: [id], onDelete: Restrict)
+  pagamentos  Pagamento[]
+  documentos  Documento[]
+
+  @@index([orcamentoId])
+  @@index([executanteId])
+  @@map("compras")
+}
+
+model Pagamento {
+  id              Int            @id @default(autoincrement())
+  compraId        Int            @map("compra_id")
+  forma           FormaPagamento
+  dados           String
+  valorPago       Decimal?       @map("valor_pago") @db.Decimal(10, 2)
+  registradoPorId Int            @map("registrado_por_id")
+  pagoPorId       Int?           @map("pago_por_id")
+  pagoEm          DateTime?      @map("pago_em")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  compra        Compra      @relation(fields: [compraId], references: [id], onDelete: Restrict)
+  registradoPor Usuario     @relation("PagamentoRegistradoPor", fields: [registradoPorId], references: [id], onDelete: Restrict)
+  pagoPor       Usuario?    @relation("PagamentoPagoPor", fields: [pagoPorId], references: [id], onDelete: Restrict)
+  documentos    Documento[]
+
+  @@index([compraId])
+  @@index([registradoPorId])
+  @@index([pagoPorId])
+  @@map("pagamentos")
+}
+
+model Documento {
+  id             Int           @id @default(autoincrement())
+  tipo           TipoDocumento
+  nomeOriginal   String        @map("nome_original")
+  mimeType       String        @map("mime_type")
+  tamanhoBytes   Int           @map("tamanho_bytes")
+  hash           String
+  nomeArmazenado String        @unique @map("nome_armazenado")
+  donoId         Int           @map("dono_id")
+  orcamentoId    Int?          @map("orcamento_id")
+  compraId       Int?          @map("compra_id")
+  pagamentoId    Int?          @map("pagamento_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  dono      Usuario    @relation(fields: [donoId], references: [id], onDelete: Restrict)
+  orcamento Orcamento? @relation(fields: [orcamentoId], references: [id], onDelete: Restrict)
+  compra    Compra?    @relation(fields: [compraId], references: [id], onDelete: Restrict)
+  pagamento Pagamento? @relation(fields: [pagamentoId], references: [id], onDelete: Restrict)
+
+  @@index([donoId])
+  @@index([orcamentoId])
+  @@index([compraId])
+  @@index([pagamentoId])
+  @@index([hash])
+  @@map("documentos")
+}
+
+model Auditoria {
+  id             Int           @id @default(autoincrement())
+  usuarioId      Int           @map("usuario_id")
+  perfil         PerfilUsuario
+  acao           AcaoAuditoria
+  entidade       String
+  entidadeId     Int           @map("entidade_id")
+  estadoAnterior String?       @map("estado_anterior")
+  estadoNovo     String?       @map("estado_novo")
+  dados          Json?
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([usuarioId])
+  @@index([entidade, entidadeId])
+  @@index([createdAt])
+  @@map("auditoria")
+}
+
+model Notificacao {
+  id            Int       @id @default(autoincrement())
+  usuarioId     Int       @map("usuario_id")
+  mensagem      String
+  lida          Boolean   @default(false)
+  lidaEm        DateTime? @map("lida_em")
+  solicitacaoId Int?      @map("solicitacao_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  usuario     Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  solicitacao Solicitacao? @relation(fields: [solicitacaoId], references: [id], onDelete: Restrict)
+
+  @@index([usuarioId, lida])
+  @@index([solicitacaoId])
+  @@map("notificacoes")
+}
+
+model Sessao {
+  id               Int       @id @default(autoincrement())
+  usuarioId        Int       @map("usuario_id")
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  revogadaEm       DateTime? @map("revogada_em")
+  expiraEm         DateTime  @map("expira_em")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([usuarioId])
+  @@index([expiraEm])
+  @@map("sessoes")
+}

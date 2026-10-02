@@ -1,0 +1,60 @@
+# Sistema de Compras — deploy via docker-compose (DEC-004, Fase 9)
+# Uso: cp .env.example .env (ajustar segredos!) && docker compose up -d --build
+# Reproduzível: migrations rodam no boot do backend; healthchecks orquestram a ordem.
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: compras-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?defina MYSQL_ROOT_PASSWORD no .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-compras}
+      MYSQL_USER: ${MYSQL_USER:-compras}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?defina MYSQL_PASSWORD no .env}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: compras-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      DATABASE_URL: mysql://${MYSQL_USER:-compras}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-compras}
+      JWT_SECRET: ${JWT_SECRET:?defina JWT_SECRET no .env — a API falha sem ele}
+      SLA_ATIVO: ${SLA_ATIVO:-false}
+    volumes:
+      - uploads-data:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build: ./frontend
+    container_name: compras-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  mysql-data:
+  uploads-data:
