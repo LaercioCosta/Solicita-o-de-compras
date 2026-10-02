@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Sistema de Compras
 
 Sistema de controle de solicitações de compra com fluxo de aprovação em duas etapas
@@ -68,3 +69,6 @@ Passo a passo completo, seed opcional de homologação, volumes/backup e retenç
 [docs/deployment.md](docs/deployment.md). Nota: o ambiente de desenvolvimento deste
 projeto não tem Docker — o runtime dos containers é `NÃO MEDIDO` aqui e deve ser
 validado na implantação.
+=======
+# Solicita-o-de-compras
+>>>>>>> a247c013b750157625e91ac55b1bc604d09c2ad2
